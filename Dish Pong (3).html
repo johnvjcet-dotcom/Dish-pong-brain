@@ -1,0 +1,615 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Dish Pong</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a microscope bench. Court and culture side by side on wide screens, stacked on phones. */
+:root{
+  color-scheme:dark;
+  --bg:#0f0d14; --panel:#16121d; --line:#2a2336; --fg:#ece6f0; --muted:#a095ad;
+  --court:#110e17; --medium:#2a1620; --medium-edge:#1b0f15;
+  --neuron:#f1dccf; --spike:#d4fff8; --calm:#6ad6c3; --noise:#ff6a5c;
+  --display:"Bricolage Grotesque","Helvetica Neue",Arial,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font:15px/1.5 var(--display);
+  padding-block:20px 40px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px))}
+.wrap{max-width:1040px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+h1{font-size:clamp(34px,7vw,56px);line-height:.95;margin:0;font-weight:800;letter-spacing:-.02em;text-wrap:balance}
+.lede{margin:10px 0 0;color:var(--muted);max-width:60ch;text-wrap:pretty}
+h2{font:500 11px/1.2 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+.grid{display:grid;gap:14px;grid-template-columns:minmax(0,1fr);
+  grid-template-areas:"court" "controls" "stats" "dish" "curve"}
+@media (min-width:900px){
+  .grid{grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);
+    grid-template-areas:"court dish" "controls dish" "curve stats";align-items:start}
+}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;min-width:0}
+.court-panel{grid-area:court;padding:0;overflow:hidden;position:relative}
+.dish-panel{grid-area:dish}
+.curve-panel{grid-area:curve}
+.stats-panel{grid-area:stats}
+canvas{display:block;width:100%}
+#court{aspect-ratio:3/2;background:var(--court)}
+#dish{aspect-ratio:1;max-width:560px;margin-inline:auto}
+#curve{aspect-ratio:3.4/1}
+.fb{position:absolute;left:10px;top:10px;font:500 11px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;
+  padding:6px 8px;border-radius:6px;background:rgba(15,13,20,.78);border:1px solid var(--line);color:var(--muted);transition:color .2s,border-color .2s}
+.fb[data-kind="calm"]{color:var(--calm);border-color:var(--calm)}
+.fb[data-kind="noise"]{color:var(--noise);border-color:var(--noise)}
+.controls{grid-area:controls;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+button{font:500 13px/1 var(--mono);color:var(--fg);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:11px 14px;cursor:pointer;min-height:42px}
+button:hover{border-color:var(--muted)}
+button:focus-visible{outline:2px solid var(--neuron);outline-offset:2px}
+button[aria-pressed="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+#btnSound[aria-pressed="true"]{background:var(--calm);border-color:var(--calm);color:#0b1a17}
+.seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;border-radius:0;border-right:1px solid var(--line);padding-inline:12px}
+.seg button:last-child{border-right:0}
+.seglabel{font:500 11px/1 var(--mono);color:var(--muted);letter-spacing:.1em;text-transform:uppercase}
+.legend{margin:10px 0 0;font:400 12px/1.5 var(--mono);color:var(--muted)}
+.status{display:flex;gap:10px;align-items:baseline;margin-bottom:12px}
+.status b{font-size:22px;font-weight:700;letter-spacing:-.01em}
+.status span{color:var(--muted);font-size:13px}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--muted);flex:none;align-self:center}
+dl{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 16px;margin:0}
+dt{font:500 11px/1.2 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+dd{margin:2px 0 0;font:500 22px/1.1 var(--mono);font-variant-numeric:tabular-nums}
+dd small{font-size:12px;color:var(--muted);font-weight:400}
+details{color:var(--muted);font-size:14px;max-width:70ch}
+summary{cursor:pointer;color:var(--fg);font-weight:500}
+summary:focus-visible{outline:2px solid var(--neuron);outline-offset:3px}
+details p{margin:8px 0 0}
+</style>
+
+<main class="wrap">
+  <header>
+    <h1>Dish Pong</h1>
+    <p class="lede">A simulated dish of 60 neurons is learning Pong. A hit is answered with a calm, steady beat. A miss gets static. Watch the hit rate climb. Turn sound on to hear it.</p>
+  </header>
+
+  <div class="grid">
+    <section class="panel court-panel" aria-label="Pong court">
+      <canvas id="court" role="img" aria-label="Pong court where the culture's paddle on the left tries to meet the ball"></canvas>
+      <div class="fb" id="fb" data-kind="" aria-live="off">Waiting for feedback</div>
+    </section>
+
+    <div class="controls">
+      <button id="btnSound" type="button" aria-pressed="false">Sound off</button>
+      <span class="seglabel">Speed</span>
+      <div class="seg" role="group" aria-label="Simulation speed">
+        <button type="button" data-speed="1" aria-pressed="false">1×</button>
+        <button type="button" data-speed="4" aria-pressed="true">4×</button>
+        <button type="button" data-speed="16" aria-pressed="false">16×</button>
+        <button type="button" data-speed="64" aria-pressed="false">64×</button>
+      </div>
+      <button id="btnPause" type="button" aria-pressed="false">Pause</button>
+      <button id="btnReset" type="button">New culture</button>
+    </div>
+
+    <section class="panel stats-panel" aria-label="Progress">
+      <div class="status"><i class="dot" id="dot"></i><b id="stLabel">Waking up</b><span id="stNote"></span></div>
+      <dl>
+        <div><dt>Rallies</dt><dd id="sRallies">0</dd></div>
+        <div><dt>Hit rate, last 20</dt><dd id="sRate">0<small>%</small></dd></div>
+        <div><dt>Streak</dt><dd id="sStreak">0</dd></div>
+        <div><dt>Best streak</dt><dd id="sBest">0</dd></div>
+        <div><dt>Time on array</dt><dd id="sTime">0:00</dd></div>
+        <div><dt>Mean firing</dt><dd id="sHz">0<small> Hz</small></dd></div>
+      </dl>
+    </section>
+
+    <section class="panel dish-panel" aria-label="The culture">
+      <h2>The culture</h2>
+      <canvas id="dish" role="img" aria-label="A petri dish with 60 neurons. Left electrodes receive the ball position, right neurons move the paddle. Brighter lines are stronger connections."></canvas>
+      <p class="legend">Left: ball position goes in. Right: two groups push the paddle up or down. Brighter links are stronger synapses.</p>
+    </section>
+
+    <section class="panel curve-panel" aria-label="Learning curve">
+      <h2>Hit rate over rallies</h2>
+      <canvas id="curve" role="img" aria-label="Line chart of the rolling hit rate over rallies"></canvas>
+    </section>
+  </div>
+
+  <details>
+    <summary>How the culture learns</summary>
+    <p>The spot where the ball will arrive, relative to the paddle, is stimulated onto 16 electrodes on the left. Spikes from the hidden layer reach two groups of motor neurons on the right, and the difference in their firing rates moves the paddle.</p>
+    <p>A hit is followed by a regular sweep of pulses, a predictable pattern. A miss is followed by random bursts that scramble the synapses, more strongly while the culture is still doing badly. Synapses whose spikes came before a good move get stronger, and synapse totals per neuron stay balanced.</p>
+    <p>This is a small simplified model, not a recreation of the lab experiment. Besides hit and miss, it also gets a distance error signal while the ball approaches, which is what makes it learn within minutes. As the culture gets good, its background noise and learning rate fade, which is why long streaks appear later.</p>
+  </details>
+</main>
+
+<script>
+/* Dish Pong engine: spiking culture + Pong physics. No dependencies. */
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;var t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function gaussR(r){var u=0;while(u===0)u=r();var v=r();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v)}
+
+var CFG = {
+  NS:16, NH:32, NMp:6,
+  dt:1/180,
+  tauM:0.015, tauS:0.006, tauX:0.02, tauE:0.25, tauY:2.0, tauR:0.07,
+  bias:0.5, biasH:0.4, biasM:0.3, noiseSD:0.5,
+  sensRate:140,
+  Aplus:1.0, Aminus:0.6,
+  eta:0.003, etaD:0.0004, wmax:1.2,
+  baseAlpha:0.06,
+  perturb:0.02,
+  vmax:1.8, rateDiffFull:14,
+  W:1.5, px:0.05, pw:0.025, ph:0.2, br:0.02, speed:1.5,
+  predict:1, spring:0.1, anneal:0.92, annealFrom:0.6, skillA:0.02, lrFloor:0.3, motorTarget:2.2, pSM:0.5, calmTime:0.6, noiseTime:0.8, shape:0.5, shapeW:0.22
+};
+
+function Culture(seed, cfg){
+  cfg = cfg || CFG;
+  var rng = mulberry32(seed|0), NS=cfg.NS, NH=cfg.NH, NMp=cfg.NMp, NM=NMp*2;
+  var N = NS+NH+NM;
+  this.cfg=cfg; this.rng=rng; this.N=N; this.NS=NS; this.NH=NH; this.NM=NM; this.NMp=NMp;
+  this.h0=NS; this.m0=NS+NH;
+  this.v=new Float32Array(N); this.refr=new Float32Array(N); this.cur=new Float32Array(N);
+  this.xt=new Float32Array(N); this.ybar=new Float32Array(N).fill(0.05*cfg.dt); this.spike=new Uint8Array(N); this.glow=new Float32Array(N);
+  this.rate=[0,0]; this.nSpikes=0; this.noiseScale=1;
+  var pre=[],post=[],w=[],pl=[],kind=[];
+  function add(a,b,wt,p,k){pre.push(a);post.push(b);w.push(wt);pl.push(p);kind.push(k)}
+  var i,j;
+  for(j=0;j<NS;j++)for(i=0;i<NH;i++) if(rng()<0.4) add(j,NS+i,0.25+rng()*0.5,1,0);
+  for(j=0;j<NH;j++)for(i=0;i<NH;i++){ if(i===j||rng()>0.12) continue;
+    if(rng()<0.2) add(NS+j,NS+i,-(0.3+rng()*0.6),0,1); else add(NS+j,NS+i,0.1+rng()*0.4,1,1);}
+  for(j=0;j<NH;j++)for(i=0;i<NM;i++) if(rng()<0.4) add(NS+j,NS+NH+i,0.08+rng()*0.3,1,2);
+  for(j=0;j<NS;j++)for(i=0;i<NM;i++) if(rng()<cfg.pSM) add(j,NS+NH+i,0.08+rng()*0.25,1,3);
+  for(j=0;j<NM;j++)for(i=0;i<NM;i++){ if((j<NMp)===(i<NMp)) continue; if(rng()<0.5) add(NS+NH+j,NS+NH+i,-0.35,0,4);}
+  var S=pre.length; this.S=S;
+  this.pre=Int16Array.from(pre); this.post=Int16Array.from(post);
+  this.w=Float32Array.from(w); this.e=new Float32Array(S);
+  this.pl=Uint8Array.from(pl); this.kind=Uint8Array.from(kind);
+  this.w0=Float32Array.from(w);
+  this.dW=new Float32Array(S);
+  for(i=0;i<N;i++) this.v[i]=rng()*0.5;
+  // incoming plastic synapse lists and scaling targets
+  this.inc=[]; this.tgt=new Float32Array(N);
+  for(i=0;i<N;i++) this.inc.push([]);
+  for(var q=0;q<S;q++) if(this.pl[q]) this.inc[this.post[q]].push(q);
+  for(i=0;i<N;i++){ var sm=0,L=this.inc[i]; for(q=0;q<L.length;q++) sm+=this.w[L[q]]; this.tgt[i]=sm; }
+  for(i=this.m0;i<N;i++) this.tgt[i]=cfg.motorTarget;
+  this.normalize(); this.w0=Float32Array.from(this.w);
+}
+Culture.prototype.normalize=function(){
+  var wmax=this.cfg.wmax;
+  for(var i=this.NS;i<this.N;i++){
+    var L=this.inc[i]; if(!L.length) continue;
+    var sm=0,q; for(q=0;q<L.length;q++) sm+=this.w[L[q]];
+    if(sm<=1e-6) continue; var k=this.tgt[i]/sm;
+    for(q=0;q<L.length;q++){ var nw=this.w[L[q]]*k; this.w[L[q]]=nw>wmax?wmax:nw; }
+  }
+};
+Culture.prototype.step=function(dt,sensRates,learn){
+  var c=this.cfg,N=this.N,NS=this.NS,rng=this.rng,v=this.v,refr=this.refr,cur=this.cur,sp=this.spike,xt=this.xt;
+  var dm=dt/c.tauM, ds=Math.exp(-dt/c.tauS), dx=Math.exp(-dt/c.tauX), i;
+  var mU=0,mD=0,m0=this.m0,NMp=this.NMp;
+  for(i=0;i<N;i++){
+    sp[i]=0;
+    if(i<NS){ if(rng()<sensRates[i]*c.sensRate*dt) sp[i]=1; }
+    else if(refr[i]>0){ refr[i]-=dt; v[i]=0; }
+    else { var I=cur[i]+(i>=m0?c.biasM:c.biasH)+c.noiseSD*this.noiseScale*gaussR(rng); v[i]+=dm*(-v[i]+I); if(v[i]>=1){sp[i]=1;v[i]=0;refr[i]=0.003;} }
+    this.ybar[i]+=(sp[i]-this.ybar[i])*dt/c.tauY;
+    xt[i]*=dx; if(sp[i]){ xt[i]+=1; this.glow[i]=1; this.nSpikes++; } else this.glow[i]*=0.93;
+    cur[i]*=ds;
+    if(sp[i]&&i>=m0){ if(i<m0+NMp) mU++; else mD++; }
+  }
+  var S=this.S,pre=this.pre,post=this.post,w=this.w,e=this.e,pl=this.pl;
+  var de=Math.exp(-dt/c.tauE), Ap=c.Aplus, Am=c.Aminus;
+  for(var s=0;s<S;s++){
+    var a=pre[s],b=post[s];
+    if(sp[a]) cur[b]+=w[s];
+    if(learn&&pl[s]){
+      e[s]=e[s]*de+Ap*xt[a]*(sp[b]-this.ybar[b]);
+    }
+  }
+  var k=dt/c.tauR;
+  this.rate[0]+=(-this.rate[0]*k)+(mU/NMp)/c.tauR;
+  this.rate[1]+=(-this.rate[1]*k)+(mD/NMp)/c.tauR;
+};
+/* reward-modulated update. delta = outcome - expectation */
+Culture.prototype.reinforce=function(delta){
+  var c=this.cfg,w=this.w,e=this.e,pl=this.pl,wmax=c.wmax;
+  for(var s=0;s<this.S;s++){
+    if(!pl[s]) continue;
+    var nw=w[s]+c.eta*delta*e[s];
+    w[s]=nw<0?0:(nw>wmax?wmax:nw);
+    e[s]=0;
+  }
+  this.normalize();
+};
+/* dense error signal while the ball approaches */
+Culture.prototype.dense=function(r){
+  var c=this.cfg,w=this.w,e=this.e,pl=this.pl,wmax=c.wmax,k=c.etaD*r;
+  for(var s=0;s<this.S;s++){ if(!pl[s]) continue; var nw=w[s]+k*e[s]; w[s]=nw<0?0:(nw>wmax?wmax:nw); }
+  this.dcount=(this.dcount||0)+1; if(this.dcount%30===0) this.normalize();
+};
+/* unpredictable stimulation scrambles synapses; scale = how unpredictable the world still is */
+Culture.prototype.scramble=function(scale){
+  var c=this.cfg,w=this.w,pl=this.pl,rng=this.rng;
+  for(var s=0;s<this.S;s++){
+    if(!pl[s]) continue;
+    var nw=w[s]+c.perturb*scale*gaussR(rng)*(0.15+w[s]);
+    w[s]=nw<0?0:(nw>c.wmax?c.wmax:nw);
+  }
+  this.normalize();
+};
+Culture.prototype.clearTraces=function(){ this.e.fill(0); };
+
+function Game(seed, cfg){
+  cfg=cfg||CFG; this.cfg=cfg; this.seed=seed;
+  this.culture=new Culture(seed,cfg);
+  this.rng=mulberry32((seed|0)^0x9e3779b9);
+  this.t=0; this.skill=0.3; this.rbar=0; this.py=0.5; this.pv=0;
+  this.hits=0; this.misses=0; this.streak=0; this.best=0; this.base=0.3;
+  this.history=[]; this.phase='play'; this.stimUntil=0; this.stimKind=null; this.stimT0=0;
+  this.noiseRates=new Float32Array(cfg.NS); this.noiseNext=0;
+  this.rates=new Float32Array(cfg.NS);
+  this.event=null; this.lastOffset=0;
+  this.serve();
+}
+Game.prototype.serve=function(){
+  var c=this.cfg,r=this.rng;
+  this.bx=c.W*(0.55+r()*0.4); this.by=0.12+r()*0.76;
+  var th=(r()*2-1)*0.6;
+  this.vx=-c.speed*Math.cos(th); this.vy=c.speed*Math.sin(th);
+  this.alive=true; this.phase='play';
+};
+Game.prototype.hitRate=function(n){
+  n=n||20; var h=this.history, m=Math.min(n,h.length); if(!m) return 0;
+  var s=0; for(var i=h.length-m;i<h.length;i++) s+=h[i]; return s/m;
+};
+Game.prototype.tick=function(){
+  var c=this.cfg,dt=c.dt,cu=this.culture,r=this.rng,i,NS=c.NS;
+  this.t+=dt; this.event=null;
+  var calmF=1-c.anneal*Math.max(0,Math.min(1,(this.skill-c.annealFrom)/(1-c.annealFrom)));
+  cu.noiseScale=calmF; this.calmF=calmF;
+  var inStim=this.t<this.stimUntil;
+  var rates=this.rates;
+  if(inStim&&this.stimKind==='calm'){
+    // predictable: a regular sweep across the electrodes, same every time
+    var ph=((this.t-this.stimT0)*5)%1, ch=Math.floor(ph*NS);
+    for(i=0;i<NS;i++) rates[i]=(i===ch||i===(ch+1)%NS)?0.9:0;
+  } else if(inStim&&this.stimKind==='noise'){
+    if(this.t>=this.noiseNext){ for(i=0;i<NS;i++) this.noiseRates[i]=r()<0.5?r():0; this.noiseNext=this.t+0.02+r()*0.03; }
+    for(i=0;i<NS;i++) rates[i]=this.noiseRates[i];
+  } else if(this.alive){
+    var ty=this.by;
+    if(c.predict>0&&this.vx<0){
+      var tt=(this.bx-c.px)/(-this.vx), yy=this.by+this.vy*tt, lo=c.br, span=1-2*c.br;
+      yy=(yy-lo)%(2*span); if(yy<0) yy+=2*span; if(yy>span) yy=2*span-yy; yy+=lo;
+      ty=this.by+c.predict*(yy-this.by);
+    }
+    var off=(ty-this.py)/0.5; off=off<-1?-1:(off>1?1:off); this.lastOffset=off;
+    var amp=this.vx<0?(0.4+0.6*Math.max(0,1-(this.bx-c.px)/c.W)):0.25;
+    for(i=0;i<NS;i++){ var ctr=-1+2*i/(NS-1), d=(off-ctr)/0.16; rates[i]=amp*Math.exp(-d*d); }
+  } else { for(i=0;i<NS;i++) rates[i]=0; }
+  var learn=this.alive&&this.vx<0&&!inStim;
+  cu.step(dt,rates,learn);
+  if(learn&&c.etaD>0){ var so=Math.tanh(this.lastOffset/0.12), rr=this.pv*so; this.rbar+=(rr-this.rbar)*dt/2; cu.dense((rr-this.rbar)*(c.lrFloor+(1-c.lrFloor)*this.calmF)); }
+  // paddle from motor pools
+  var dr=cu.rate[0]-cu.rate[1];
+  var vel=c.vmax*dr/c.rateDiffFull; vel=vel<-c.vmax?-c.vmax:(vel>c.vmax?c.vmax:vel);
+  vel+=-c.spring*(this.py-0.5); vel=vel<-c.vmax?-c.vmax:(vel>c.vmax?c.vmax:vel);
+  var py0=this.py; this.py+=vel*dt;
+  var hh=c.ph/2; if(this.py<hh){this.py=hh;} if(this.py>1-hh){this.py=1-hh;}
+  this.pv=(this.py-py0)/dt;
+  if(this.phase==='wait'){ if(this.t>=this.stimUntil) this.serve(); return; }
+  if(!this.alive){ if(this.t>=this.stimUntil) this.serve(); return; }
+  this.bx+=this.vx*dt; this.by+=this.vy*dt;
+  if(this.by<c.br){this.by=c.br;this.vy=Math.abs(this.vy);}
+  if(this.by>1-c.br){this.by=1-c.br;this.vy=-Math.abs(this.vy);}
+  if(this.bx>c.W-c.br){this.bx=c.W-c.br;this.vx=-Math.abs(this.vx);}
+  var face=c.px+c.pw/2;
+  if(this.vx<0&&this.bx-c.br<=face&&this.bx>c.px-0.1&&!this.crossed){
+    var d=this.by-this.py;
+    if(Math.abs(d)<=c.ph/2+c.br*0.6){
+      // hit
+      this.skill+=c.skillA*(1-this.skill); this.hits++; this.streak++; if(this.streak>this.best)this.best=this.streak;
+      this.history.push(1);
+      var o1=(1-c.shape)+c.shape*Math.exp(-(d/c.shapeW)*(d/c.shapeW)); var dl=o1-this.base; this.base+=c.baseAlpha*(o1-this.base);
+      cu.reinforce(dl);
+      this.bx=face+c.br; var sp=c.speed;
+      this.vy+=d/(c.ph/2)*0.5; var m=Math.max(-0.8*sp,Math.min(0.8*sp,this.vy)); this.vy=m;
+      this.vx=Math.sqrt(sp*sp-this.vy*this.vy);
+      this.stimKind='calm'; this.stimT0=this.t; this.stimUntil=this.t+c.calmTime;
+      this.event={type:'hit',streak:this.streak,off:d};
+    } else {
+      this.skill+=c.skillA*(0-this.skill); this.misses++; this.streak=0; this.history.push(0);
+      var o0=c.shape*Math.exp(-(d/c.shapeW)*(d/c.shapeW)); var dl2=o0-this.base; this.base+=c.baseAlpha*(o0-this.base);
+      cu.reinforce(dl2);
+      cu.scramble((1-this.hitRate(20)*0.9)*(0.3+0.7*this.calmF));
+      this.stimKind='noise'; this.stimUntil=this.t+c.noiseTime; this.noiseNext=0;
+      this.alive=false;
+      this.event={type:'miss',off:d};
+    }
+  }
+};
+Game.prototype.reset=function(seed){ Game.call(this,seed==null?this.seed+1:seed,this.cfg); };
+
+if(typeof module!=='undefined') module.exports={Game:Game,Culture:Culture,CFG:CFG};
+
+</script>
+<script>
+(function(){
+"use strict";
+var $=function(id){return document.getElementById(id)};
+var cs=getComputedStyle(document.documentElement);
+function tok(n){return cs.getPropertyValue(n).trim()}
+var C={court:tok('--court'),line:tok('--line'),fg:tok('--fg'),muted:tok('--muted'),medium:tok('--medium'),edge:tok('--medium-edge'),
+  neuron:tok('--neuron'),spike:tok('--spike'),calm:tok('--calm'),noise:tok('--noise'),panel:tok('--panel')};
+var MONO='"IBM Plex Mono",ui-monospace,Menlo,monospace';
+var reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+var courtC=$('court'),dishC=$('dish'),curveC=$('curve');
+var cx=courtC.getContext('2d'),dx=dishC.getContext('2d'),kx=curveC.getContext('2d');
+var game=new Game((Date.now()&0xfffff)+1);
+var speed=4,paused=false;
+var series=[];           // rolling hit rate after each rally
+var fb={kind:'',t:-99,off:0};
+var trail=[];
+var vis=new Float32Array(game.culture.N), frameSpk=new Uint8Array(game.culture.N);
+var simSpikes0=0,simT0=0;
+
+/* ---------- audio ---------- */
+var AC=null,master=null,echo=null,noiseBuf=null,soundOn=false,lastSnd=-9;
+var SCALE=[220,261.63,293.66,329.63,392,440,523.25,587.33,659.25,783.99];
+function ensureAudio(){
+  if(!AC){
+    var Ctx=window.AudioContext||window.webkitAudioContext; if(!Ctx) return false;
+    AC=new Ctx(); var comp=AC.createDynamicsCompressor(); master=AC.createGain(); master.gain.value=0.85;
+    master.connect(comp); comp.connect(AC.destination);
+    var d=AC.createDelay(1); d.delayTime.value=0.31; var fbk=AC.createGain(); fbk.gain.value=0.32;
+    var lp=AC.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=1500;
+    var wet=AC.createGain(); wet.gain.value=0.5;
+    d.connect(lp); lp.connect(fbk); fbk.connect(d); lp.connect(wet); wet.connect(master);
+    echo=d;
+    noiseBuf=AC.createBuffer(1,AC.sampleRate,AC.sampleRate); var a=noiseBuf.getChannelData(0);
+    for(var i=0;i<a.length;i++) a[i]=Math.random()*2-1;
+  }
+  if(AC.state==='suspended') AC.resume();
+  return true;
+}
+function playHit(streak){
+  var t=AC.currentTime+0.01;
+  var o=AC.createOscillator(),g=AC.createGain(); o.type='sine';
+  o.frequency.setValueAtTime(118,t); o.frequency.exponentialRampToValueAtTime(48,t+0.3);
+  g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(0.55,t+0.01); g.gain.exponentialRampToValueAtTime(0.0001,t+0.45);
+  o.connect(g); g.connect(master); o.start(t); o.stop(t+0.5);
+  var f=SCALE[Math.min(SCALE.length-1,Math.max(0,streak-1))], tn=t+0.07;
+  var ng=AC.createGain(), lp=AC.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=1400;
+  ng.gain.setValueAtTime(0.0001,tn); ng.gain.linearRampToValueAtTime(0.16,tn+0.04); ng.gain.exponentialRampToValueAtTime(0.0001,tn+1.1);
+  [['sine',1,0],['triangle',2,4]].forEach(function(p){
+    var s=AC.createOscillator(); s.type=p[0]; s.frequency.value=f*p[1]; s.detune.value=p[2];
+    var pg=AC.createGain(); pg.gain.value=p[1]===1?1:0.25; s.connect(pg); pg.connect(lp); s.start(tn); s.stop(tn+1.2);
+  });
+  lp.connect(ng); ng.connect(master); ng.connect(echo);
+}
+function playMiss(){
+  var t=AC.currentTime+0.005, src=AC.createBufferSource(); src.buffer=noiseBuf; src.loop=true;
+  var bp=AC.createBiquadFilter(); bp.type='bandpass'; bp.Q.value=0.7;
+  bp.frequency.setValueAtTime(3800,t); bp.frequency.exponentialRampToValueAtTime(700,t+0.55);
+  var g=AC.createGain(); g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(0.3,t+0.01); g.gain.exponentialRampToValueAtTime(0.0001,t+0.6);
+  var crk=AC.createGain(); var cv=new Float32Array(28); for(var i=0;i<cv.length;i++) cv[i]=0.25+Math.random()*0.75;
+  crk.gain.setValueCurveAtTime(cv,t,0.55);
+  src.connect(bp); bp.connect(crk); crk.connect(g); g.connect(master); src.start(t); src.stop(t+0.65);
+}
+function feedbackSound(ev){
+  if(!soundOn||!AC) return;
+  var now=AC.currentTime, gap=speed>=16?0.35:0.1;
+  if(now-lastSnd<gap) return; lastSnd=now;
+  if(ev.type==='hit') playHit(ev.streak); else playMiss();
+}
+
+/* ---------- layout of the dish (unit disc) ---------- */
+var L=(function(){
+  var r=mulberry32(7),P=[],k,i,NS=16,NH=32,NMp=6;
+  for(k=0;k<NS;k++){var c=-1+2*k/(NS-1);P.push({x:-0.7+0.05*(1-c*c),y:c*0.64});}
+  var hid=[],minD=0.21,tries=0;
+  while(hid.length<NH){
+    tries++; var x=(r()*2-1)*0.5,y=(r()*2-1)*0.74;
+    if((x/0.5)*(x/0.5)+(y/0.74)*(y/0.74)>1) continue;
+    var ok=true; for(i=0;i<hid.length;i++){ if(Math.hypot(hid[i].x-x,hid[i].y-y)<minD){ok=false;break;} }
+    if(ok) hid.push({x:x,y:y}); if(tries%400===0) minD*=0.93;
+  }
+  hid.forEach(function(p){P.push(p)});
+  for(i=0;i<NMp;i++) P.push({x:0.68+(r()-0.5)*0.12,y:0.16+i*0.1});   // pool 0 pushes the paddle down the screen
+  for(i=0;i<NMp;i++) P.push({x:0.68+(r()-0.5)*0.12,y:-0.16-i*0.1});  // pool 1 pushes it up
+  var grid=[]; for(var gx=-4;gx<4;gx++)for(var gy=-4;gy<4;gy++){var X=(gx+0.5)/4.2,Y=(gy+0.5)/4.2; if(X*X+Y*Y<0.86) grid.push({x:X,y:Y});}
+  return {pos:P,grid:grid};
+})();
+
+/* ---------- sizing ---------- */
+function fit(c){
+  var r=c.getBoundingClientRect(),dpr=Math.min(2,window.devicePixelRatio||1);
+  var w=Math.max(2,Math.round(r.width*dpr)),h=Math.max(2,Math.round(r.height*dpr));
+  if(c.width!==w||c.height!==h){c.width=w;c.height=h;}
+  return dpr;
+}
+
+/* ---------- court ---------- */
+function drawCourt(now){
+  var dpr=fit(courtC),w=courtC.width,h=courtC.height,c=game.cfg,s=w/c.W;
+  cx.fillStyle=C.court; cx.fillRect(0,0,w,h);
+  cx.strokeStyle='rgba(236,230,240,0.05)'; cx.lineWidth=1;
+  for(var i=1;i<10;i++){var y=Math.round(i*h/10)+0.5; cx.beginPath(); cx.moveTo(0,y); cx.lineTo(w,y); cx.stroke();}
+  cx.fillStyle=C.line; cx.fillRect(w-3*dpr,0,3*dpr,h);
+  var age=Math.max(0,(now-fb.t)/1000);
+  if(fb.kind==='calm'&&age<1.2){
+    var a=1-age/1.2, px0=(c.px)*s, py0=game.py*s;
+    var rg=cx.createRadialGradient(px0,py0,0,px0,py0,s*(0.12+0.5*age));
+    rg.addColorStop(0,'rgba(106,214,195,'+(0.28*a)+')'); rg.addColorStop(1,'rgba(106,214,195,0)');
+    cx.fillStyle=rg; cx.fillRect(0,0,w,h);
+    cx.strokeStyle='rgba(106,214,195,'+(0.7*a)+')'; cx.lineWidth=2*dpr; cx.beginPath(); cx.arc(px0,py0,s*(0.1+0.35*age),0,6.283); cx.stroke();
+  }
+  var pw=c.pw*s,ph=c.ph*s,px=c.px*s-pw/2,py=game.py*s-ph/2;
+  cx.fillStyle=C.neuron; rr(cx,px,py,pw,ph,pw/2); cx.fill();
+  if(game.alive){
+    trail.push(game.bx,game.by); if(trail.length>28) trail.splice(0,2);
+    for(var k=0;k<trail.length;k+=2){ var f=k/trail.length; cx.fillStyle='rgba(212,255,248,'+(0.28*f)+')'; cx.beginPath(); cx.arc(trail[k]*s,trail[k+1]*s,c.br*s*(0.35+0.5*f),0,6.283); cx.fill(); }
+    cx.fillStyle=C.spike; cx.beginPath(); cx.arc(game.bx*s,game.by*s,c.br*s,0,6.283); cx.fill();
+  } else trail.length=0;
+  if(fb.kind==='noise'&&age<0.8){
+    var na=1-age/0.8;
+    if(reduce){ cx.fillStyle='rgba(255,106,92,'+(0.25*na)+')'; cx.fillRect(0,0,w,h); }
+    else{
+      var n=260; for(var q=0;q<n;q++){ var u=Math.random(); cx.fillStyle=u<0.55?'rgba(255,106,92,'+(0.55*na)+')':'rgba(236,230,240,'+(0.4*na)+')';
+        var rw=(2+Math.random()*10)*dpr; cx.fillRect(Math.random()*w,Math.random()*h,rw,(1+Math.random()*2)*dpr); }
+    }
+  }
+}
+function rr(g,x,y,w,h,r){g.beginPath();g.moveTo(x+r,y);g.lineTo(x+w-r,y);g.arcTo(x+w,y,x+w,y+r,r);g.lineTo(x+w,y+h-r);g.arcTo(x+w,y+h,x+w-r,y+h,r);g.lineTo(x+r,y+h);g.arcTo(x,y+h,x,y+h-r,r);g.lineTo(x,y+r);g.arcTo(x,y,x+r,y,r);g.closePath();}
+
+/* ---------- dish ---------- */
+function drawDish(now){
+  var dpr=fit(dishC),W=dishC.width,H=dishC.height,mx=W/2,my=H/2,R=Math.min(W,H)*0.47;
+  dx.clearRect(0,0,W,H);
+  var cu=game.culture,N=cu.N,i;
+  for(i=0;i<N;i++){ vis[i]=frameSpk[i]?1:vis[i]*0.8; frameSpk[i]=0; }
+  var g=dx.createRadialGradient(mx,my,R*0.1,mx,my,R);
+  g.addColorStop(0,C.medium); g.addColorStop(1,C.edge);
+  dx.fillStyle=g; dx.beginPath(); dx.arc(mx,my,R,0,6.283); dx.fill();
+  var age=Math.max(0,(now-fb.t)/1000), calm=fb.kind==='calm'&&age<1.2, noise=fb.kind==='noise'&&age<0.8;
+  dx.lineWidth=3*dpr; dx.strokeStyle=calm?'rgba(106,214,195,'+(0.9*(1-age/1.2)+0.15)+')':(noise?'rgba(255,106,92,'+(0.9*(1-age/0.8)+0.15)+')':C.line);
+  dx.beginPath(); dx.arc(mx,my,R,0,6.283); dx.stroke();
+  dx.strokeStyle='rgba(236,230,240,0.07)'; dx.lineWidth=1*dpr; dx.beginPath(); dx.arc(mx,my,R*0.93,0.9*Math.PI,1.35*Math.PI); dx.stroke();
+  // electrode array
+  var gr=L.grid; for(i=0;i<gr.length;i++){
+    var ex=mx+gr[i].x*R*1.12, ey=my+gr[i].y*R*1.12, lit=0, col=C.muted;
+    if(noise&&!reduce&&Math.random()<0.2*(1-age/0.8)){lit=1;col=C.noise;}
+    dx.fillStyle=lit?col:'rgba(160,149,173,0.22)'; dx.beginPath(); dx.arc(ex,ey,(lit?3.2:1.6)*dpr,0,6.283); dx.fill();
+  }
+  // synapses
+  var pos=L.pos,wmax=game.cfg.wmax;
+  dx.lineCap='round';
+  for(var s=0;s<cu.S;s++){
+    if(!cu.pl[s]) continue;
+    var wv=cu.w[s]/wmax; if(wv<0.06) continue;
+    var a=cu.pre[s],b=cu.post[s],q=Math.pow(wv,1.4);
+    dx.strokeStyle='rgba(241,220,207,'+(0.03+0.55*q)+')'; dx.lineWidth=(0.4+2.4*q)*dpr;
+    dx.beginPath(); dx.moveTo(mx+pos[a].x*R,my+pos[a].y*R); dx.lineTo(mx+pos[b].x*R,my+pos[b].y*R); dx.stroke();
+  }
+  // calm sweep over sensory electrodes
+  if(calm){ var ph=(age*5)%1,ch=Math.floor(ph*16); for(var m=0;m<2;m++){ var k=(((ch+m)%16)+16)%16; dx.fillStyle='rgba(106,214,195,'+(0.55*(1-age/1.2))+')'; dx.beginPath(); dx.arc(mx+pos[k].x*R,my+pos[k].y*R,11*dpr,0,6.283); dx.fill(); } }
+  // neurons
+  for(i=0;i<N;i++){
+    var x=mx+pos[i].x*R,y=my+pos[i].y*R, rad=(i<cu.NS?3.4:(i>=cu.m0?5.6:4.4))*dpr, v=vis[i];
+    if(v>0.05){ dx.fillStyle='rgba(212,255,248,'+(0.35*v)+')'; dx.beginPath(); dx.arc(x,y,rad*(1.8+2.2*v),0,6.283); dx.fill(); }
+    dx.fillStyle=v>0.5?C.spike:C.neuron; dx.globalAlpha=0.5+0.5*Math.max(v,0.1); dx.beginPath(); dx.arc(x,y,rad,0,6.283); dx.fill(); dx.globalAlpha=1;
+  }
+  // labels
+  dx.fillStyle=C.muted; dx.font='500 '+(10*dpr)+'px '+MONO; dx.textAlign='center';
+  dx.fillText('BALL IN',mx+pos[0].x*R+4*dpr,my-R*0.86);
+  dx.fillText('PADDLE OUT',mx+0.68*R,my-R*0.86);
+  dx.textAlign='left'; dx.fillText('UP',mx+0.8*R,my-0.3*R); dx.fillText('DOWN',mx+0.8*R,my+0.42*R);
+}
+
+/* ---------- curve ---------- */
+function drawCurve(){
+  var dpr=fit(curveC),w=curveC.width,h=curveC.height,l=38*dpr,r=10*dpr,t=8*dpr,b=20*dpr,pw=w-l-r,ph=h-t-b;
+  kx.clearRect(0,0,w,h);
+  function Y(v){return t+(1-v)*ph}
+  kx.font='400 '+(10*dpr)+'px '+MONO; kx.textAlign='right'; kx.textBaseline='middle';
+  [0,0.25,0.5,0.75,1].forEach(function(v){
+    kx.strokeStyle=C.line; kx.lineWidth=1; kx.setLineDash([]); kx.beginPath(); kx.moveTo(l,Math.round(Y(v))+0.5); kx.lineTo(w-r,Math.round(Y(v))+0.5); kx.stroke();
+    kx.fillStyle=C.muted; kx.fillText(Math.round(v*100)+'%',l-6*dpr,Y(v));
+  });
+  var n=series.length, maxN=Math.max(60,n);
+  function X(i){return l+(i/(maxN-1))*pw}
+  kx.setLineDash([4*dpr,4*dpr]); kx.strokeStyle=C.noise; kx.globalAlpha=0.7; kx.beginPath(); kx.moveTo(l,Y(0.25)); kx.lineTo(w-r,Y(0.25)); kx.stroke(); kx.globalAlpha=1; kx.setLineDash([]);
+  kx.textAlign='right'; kx.fillStyle=C.noise; kx.fillText('random paddle ≈ 25%',w-r-4*dpr,Y(0.25)-8*dpr);
+  kx.textAlign='left'; kx.fillStyle=C.muted; kx.textBaseline='alphabetic';
+  kx.fillText('0',l,h-4*dpr); kx.textAlign='right'; kx.fillText(maxN+' rallies',w-r,h-4*dpr);
+  if(n<2) return;
+  var step=Math.max(1,Math.floor(n/320)),i;
+  kx.beginPath(); kx.moveTo(X(0),Y(0));
+  for(i=0;i<n;i+=step) kx.lineTo(X(i),Y(series[i]));
+  kx.lineTo(X(n-1),Y(series[n-1])); kx.lineTo(X(n-1),Y(0)); kx.closePath();
+  kx.fillStyle='rgba(106,214,195,0.14)'; kx.fill();
+  kx.beginPath(); kx.moveTo(X(0),Y(series[0]));
+  for(i=0;i<n;i+=step) kx.lineTo(X(i),Y(series[i]));
+  kx.lineTo(X(n-1),Y(series[n-1])); kx.strokeStyle=C.calm; kx.lineWidth=2*dpr; kx.lineJoin='round'; kx.stroke();
+  kx.fillStyle=C.calm; kx.beginPath(); kx.arc(X(n-1),Y(series[n-1]),3.6*dpr,0,6.283); kx.fill();
+}
+
+/* ---------- DOM stats ---------- */
+var lastDom=0,lastKind='';
+function fmtTime(t){var m=Math.floor(t/60),s=Math.floor(t%60);return m+':'+(s<10?'0':'')+s}
+function status(){
+  var n=game.history.length,hr=game.hitRate(20);
+  if(n<10) return ['Waking up','The paddle moves at random.',C.muted];
+  if(hr<0.35) return ['Flailing','The paddle drifts with the noise.',C.noise];
+  if(hr<0.55) return ['Finding the ball','Links from sight to motion are forming.',C.neuron];
+  if(hr<0.75) return ['Tracking','Most balls are met.',C.calm];
+  return ['Locked on','Rallies are calm and predictable.',C.calm];
+}
+function updateDom(now){
+  if(now-lastDom<120) return; lastDom=now;
+  var st=status(); $('stLabel').textContent=st[0]; $('stNote').textContent=st[1]; $('dot').style.background=st[2];
+  $('sRallies').textContent=game.history.length;
+  $('sRate').innerHTML=Math.round(game.hitRate(20)*100)+'<small>%</small>';
+  $('sStreak').textContent=game.streak; $('sBest').textContent=game.best;
+  $('sTime').textContent=fmtTime(game.t);
+  var cu=game.culture,dt=game.t-simT0;
+  if(dt>1){ $('sHz').innerHTML=((cu.nSpikes-simSpikes0)/dt/cu.N).toFixed(1)+'<small> Hz</small>'; simSpikes0=cu.nSpikes; simT0=game.t; }
+  var fbEl=$('fb'), age=Math.max(0,(now-fb.t)/1000);
+  var k=age<1.4?fb.kind:'';
+  if(k!==lastKind){ lastKind=k; fbEl.setAttribute('data-kind',k); fbEl.textContent=k==='calm'?'Calm beat':(k==='noise'?'Static':'Waiting for feedback'); if(!k&&game.history.length) fbEl.textContent='Playing'; }
+}
+
+/* ---------- events ---------- */
+function onEvent(ev){
+  fb.kind=ev.type==='hit'?'calm':'noise'; fb.t=performance.now();
+  series.push(game.hitRate(20));
+  try{ feedbackSound(ev); }catch(e2){}
+}
+
+/* ---------- loop ---------- */
+var last=performance.now(),acc=0;
+function frame(now){
+  requestAnimationFrame(frame);
+  try{ step(now); }catch(err){ if(window.console) console.error(err); }
+}
+function step(now){
+  var d=Math.min(0.1,Math.max(0,(now-last)/1000)); last=now;
+  if(!paused){
+    acc+=d*speed; var dt=game.cfg.dt,n=0,cu=game.culture,N=cu.N;
+    while(acc>=dt&&n<600){
+      game.tick(); n++; acc-=dt;
+      for(var i=0;i<N;i++) if(cu.spike[i]) frameSpk[i]=1;
+      if(game.event) onEvent(game.event);
+    }
+    if(acc>dt*4) acc=0;
+  }
+  drawCourt(now); drawDish(now); drawCurve(); updateDom(now);
+}
+
+/* ---------- controls ---------- */
+function setSpeed(v){
+  speed=v; var bs=document.querySelectorAll('[data-speed]');
+  for(var i=0;i<bs.length;i++) bs[i].setAttribute('aria-pressed',String(+bs[i].getAttribute('data-speed')===v));
+}
+document.querySelectorAll('[data-speed]').forEach(function(b){b.addEventListener('click',function(){setSpeed(+b.getAttribute('data-speed'))})});
+$('btnSound').addEventListener('click',function(){
+  soundOn=!soundOn; this.setAttribute('aria-pressed',String(soundOn)); this.textContent=soundOn?'Sound on':'Sound off';
+  if(soundOn){ if(!ensureAudio()){ soundOn=false; this.setAttribute('aria-pressed','false'); this.textContent='No audio here'; } else { lastSnd=-9; playHit(1); } }
+});
+$('btnPause').addEventListener('click',function(){ paused=!paused; this.setAttribute('aria-pressed',String(paused)); this.textContent=paused?'Resume':'Pause'; last=performance.now(); });
+$('btnReset').addEventListener('click',function(){
+  game=new Game((Date.now()&0xfffff)+1); series=[]; fb={kind:'',t:-99}; trail=[];
+  vis=new Float32Array(game.culture.N); frameSpk=new Uint8Array(game.culture.N); simSpikes0=0; simT0=0; lastKind='x';
+  warm();
+});
+function warm(){ var n=0; while(game.history.length<6&&n<200000){ game.tick(); n++; if(game.event) series.push(game.hitRate(20)); } }
+warm(); setSpeed(4);
+requestAnimationFrame(frame);
+})();
+</script>
+
+</body></html>
